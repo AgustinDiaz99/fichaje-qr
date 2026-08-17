@@ -258,7 +258,7 @@
     const SOUND_ERROR_URL = 'https://ik.imagekit.io/8uikpwhvj/mg6jr43621-error-sfx-0.mp3';
 
     let scannerActivo = true; // Controla si se procesan nuevos escaneos
-    let bdd = [];
+    let bdd = {}; // mapa { legajo: nombre }
     let bddListos = false;
     let modalInstance = null;
     let hideTimer = null;
@@ -414,20 +414,24 @@
       var operario = (partes[0] || '').trim();
       var fichaje = (partes[1] || '').trim().toUpperCase();
 
-      var operarioValido = bdd.indexOf(operario) !== -1;
+      var operarioValido = Object.prototype.hasOwnProperty.call(bdd, operario);
 
       if (!operarioValido || (fichaje !== 'ENTRADA' && fichaje !== 'SALIDA')) {
         mostrarError('QR DESCONOCIDO (RELEER)');
         return;
       }
 
-      mostrarValidando(operario, fichaje);
+      // Si el legajo todavía no tiene nombre cargado en la planilla, se
+      // muestra el número de legajo como antes (nunca queda vacío).
+      var nombreMostrar = (bdd[operario] || '').trim() || operario;
+
+      mostrarValidando(nombreMostrar, fichaje);
 
       var resuelto = false;
       var watchdog = setTimeout(function () {
         if (resuelto) return;
         resuelto = true;
-        mostrarError('El servidor tardó demasiado en responder. Reintentá.', operario);
+        mostrarError('El servidor tardó demasiado en responder. Reintentá.', nombreMostrar);
       }, 12000);
 
       llamarApi('accion=validar&data=' + encodeURIComponent(qrCodeMessage))
@@ -436,17 +440,17 @@
           resuelto = true;
           clearTimeout(watchdog);
           if (resultado && resultado.ok) {
-            mostrarExito(operario, fichaje);
+            mostrarExito(nombreMostrar, fichaje);
           } else {
             var motivo = resultado ? resultado.motivo : null;
-            mostrarError(MENSAJES_ERROR[motivo] || 'No se pudo validar la fichada. Reintentá.', operario);
+            mostrarError(MENSAJES_ERROR[motivo] || 'No se pudo validar la fichada. Reintentá.', nombreMostrar);
           }
         })
         .catch(function () {
           if (resuelto) return;
           resuelto = true;
           clearTimeout(watchdog);
-          mostrarError('No se pudo guardar la fichada (sin conexión o error del servidor). Reintentá.', operario);
+          mostrarError('No se pudo guardar la fichada (sin conexión o error del servidor). Reintentá.', nombreMostrar);
         });
     }
 
@@ -474,8 +478,8 @@
     function cargarLegajosValidos(intento) {
       intento = intento || 1;
       llamarApi('accion=legajos')
-        .then(function (lista) {
-          bdd = Array.isArray(lista) ? lista : [];
+        .then(function (mapa) {
+          bdd = (mapa && typeof mapa === 'object' && !Array.isArray(mapa)) ? mapa : {};
           bddListos = true;
           actualizarPillCarga(true);
         })
